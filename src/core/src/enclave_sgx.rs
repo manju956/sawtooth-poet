@@ -113,8 +113,8 @@ impl EnclaveConfig {
         info!("creating signup_info");
 
         ffi::create_signup_info(&mut eid, 
-                                &(poet2_util::to_hex_string(&pub_key_hash.to_vec())),
-                                &mut signup).unwrap();         
+                                &(poet2_util::to_hex_string(pub_key_hash.to_vec())),
+                                &mut signup).expect("Failed to create signup info");
 
         self.signup_info.handle = signup.handle;
         self.signup_info.poet_public_key = signup.poet_public_key;
@@ -136,8 +136,9 @@ impl EnclaveConfig {
         // initialize wait certificate - to get duration from enclave
         ffi::initialize_wait_cert(&mut eid, &mut duration, 
                                   &in_prev_wait_cert, &in_prev_wait_cert_sig,
-                                  &poet2_util::to_hex_string(&in_validator_id.to_vec()),
-                                  &in_poet_pub_key).unwrap();
+                                  &poet2_util::to_hex_string(in_validator_id.to_vec()),
+                                  &in_poet_pub_key)
+                                  .expect("Failed to initialize Wait certificate");
         
         debug!("Duration fetched from enclave = {:x?}", duration);
         
@@ -164,7 +165,8 @@ impl EnclaveConfig {
     	let ret = ffi::finalize_wait_cert(&mut eid, &mut wait_cert_info,
                                           &in_wait_cert, &in_prev_block_id,
                                           &in_prev_wait_cert_sig,
-                                          &in_block_summary, &in_wait_time);
+                                          &in_block_summary, &in_wait_time)
+                                    .expect("Failed to finalize Wait certificate");
 
         let wait_cert = ffi::create_string_from_char_ptr(
                              wait_cert_info.ser_wait_cert as *mut c_char);
@@ -175,7 +177,8 @@ impl EnclaveConfig {
         info!("wait certificate generated is {:?}", wait_cert);
 
         //release wait certificate
-        let status = ffi::release_wait_certificate(&mut eid, &mut wait_cert_info);
+        let status = ffi::release_wait_certificate(&mut eid, &mut wait_cert_info)
+                            .expect("Failed to release wait certificate");
 
     	(wait_cert, wait_cert_sign)
     }
@@ -216,7 +219,7 @@ impl EnclaveConfig {
         let mut eid:r_sgx_enclave_id_t = self.enclave_id;
         let ret = ffi::set_sig_revocation_list(&mut eid, 
                                       &sig_rev_list.as_str())
-                                .expect("Failed to set sig revocation list");
+                                .expect("Failed to set signature revocation list");
         debug!("Signature revocation list has been updated");
     }
 
@@ -228,5 +231,87 @@ impl EnclaveConfig {
                                   signup_data.enclave_quote as *mut c_char);
         (poet_pub_key, enclave_quote)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use enclave_sgx::*;
     
+    #[test]
+    fn test_init_enclave() {
+        let mut enclave = EnclaveConfig::default();
+
+        enclave.initialize_enclave();
+        assert_eq!( (enclave.enclave_id.handle > 0), true);
+    }
+
+    #[test]
+    fn test_get_epid_group() {
+        let mut enclave = EnclaveConfig::default();
+        enclave.initialize_enclave();
+        assert_eq!( (enclave.enclave_id.handle > 0), true);
+
+        let ret = enclave.get_epid_group();
+        assert_eq!((ret.len() > 0), true);
+    }
+
+    #[test]
+    fn test_is_sgx_simulator() {
+        let mut enclave = EnclaveConfig::default();
+        enclave.initialize_enclave();
+        assert_eq!( (enclave.enclave_id.handle > 0), true);
+
+        let ret = enclave.check_if_sgx_simulator();
+        println!("is_sgx_simulator ? {:?}", ret);
+    }
+
+    #[test]
+    fn test_create_signup_info() {
+        let mut enclave = EnclaveConfig::default();
+        enclave.initialize_enclave();
+        assert_eq!( (enclave.enclave_id.handle > 0), true);
+
+        let pub_key_hash = vec![0x45; 32];
+        enclave.create_signup_info(&pub_key_hash);
+        assert_eq!( (enclave.signup_info.handle > 0), true);
+    }
+
+    #[test]
+    fn test_create_wait_certificate() {
+        let mut enclave = EnclaveConfig::default();
+        enclave.initialize_enclave();
+        assert_eq!( (enclave.enclave_id.handle > 0), true);
+
+        let pub_key_hash = vec![0x45; 32]; 
+        enclave.create_signup_info(&pub_key_hash.to_vec());
+        assert_eq!( (enclave.signup_info.handle > 0), true);
+
+        let mut duration: u64 = 0x0102030405060708;
+        let prev_cert = "".to_string();
+        let prev_wait_cert_sig = "".to_string();
+        let validator_id = vec![0x41; 32]; 
+        let prev_block_id = "abc".to_string();
+        let block_summary = "this is first block".to_string();
+        let wait_time = 10_u64;
+
+        let (poet_pub_key, enclave_quote) = enclave.get_signup_parameters();
+
+        let ret_dur = EnclaveConfig::initialize_wait_certificate(enclave.enclave_id, prev_cert.clone(),
+                                            prev_wait_cert_sig.clone(),
+                                            &validator_id, &poet_pub_key);
+        assert_eq!((ret_dur > 0), true);
+
+        println!("calling finalize_wait_certificate");
+        let (wait_cert, wait_cert_sig) = EnclaveConfig::finalize_wait_certificate(enclave.enclave_id, 
+                                                    prev_cert.clone(), prev_block_id.clone(),
+                                                    prev_wait_cert_sig.clone(),
+                                                    block_summary.clone(), wait_time.clone());
+        assert_eq!(wait_cert.is_empty(), false);
+        assert_eq!(wait_cert_sig.is_empty(), false);
+        println!("wait cert = {}", wait_cert);
+        let verify_status = EnclaveConfig::verify_wait_certificate(enclave.enclave_id,
+                                    &poet_pub_key, &wait_cert, &wait_cert_sig);
+        println!("Wait Certificate verification {}", if verify_status {"Passed"}
+                 else {"Failed"});
+    }
 }

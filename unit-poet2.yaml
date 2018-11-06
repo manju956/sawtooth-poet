@@ -29,5 +29,7 @@ services:
     volumes:
       - ./:/project/sawtooth-poet2/
     working_dir: '/project/sawtooth-poet2/src/core'
-    command:  cargo test
+    entrypoint: "bash -c \"\
+        source /project/sawtooth-poet2/build_sgx_binary.sh \
+        && cargo test -- --test-threads=1\""
     stop_signal: SIGKILL
