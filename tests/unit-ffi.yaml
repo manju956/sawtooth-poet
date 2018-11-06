@@ -16,7 +16,7 @@
 version: "3.6"
 
 services:
-  unit-poet:
+  unit-ffi:
     image: sawtooth-poet-engine-local:$ISOLATION_ID
     build:
       context: ./
@@ -27,9 +27,10 @@ services:
         - no_proxy
     volumes:
       - ..:/project/sawtooth-poet/
-    working_dir: '/project/sawtooth-poet/core'
+    working_dir: '/project/sawtooth-poet/sgx/rust_sgxffi'
     entrypoint: "bash -c \"\
         source /project/sawtooth-poet/build_sgx_binary.sh \
+        && cd /project/sawtooth-poet/sgx/rust_sgxffi \
         && cargo test -- --test-threads=1 \""
     stop_signal: SIGKILL
 

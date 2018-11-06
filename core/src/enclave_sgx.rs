@@ -17,6 +17,7 @@
 
 extern crate base64;
 extern crate openssl;
+extern crate toml;
 
 use ias_client::{client_utils::read_body_as_string, ias_client::IasClient};
 use openssl::pkey::PKey;
@@ -39,6 +40,7 @@ use std::path::PathBuf;
 use std::ptr;
 use std::str;
 use std::string::String;
+use std::vec::Vec;
 use validator_registry_tp::validator_registry_signup_info::{
     SignupInfoProofData, ValidatorRegistrySignupInfo,
 };
@@ -443,4 +445,111 @@ fn check_verification_report(
     }
     // AVR verification done
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use enclave_sgx::*;
+    use toml as toml_converter;
+
+    const TOML_FILE: &str = "src/resources/poet_config.toml";
+
+    fn get_config() -> PoetConfig {
+        let file_contents = read_file_as_string(TOML_FILE);
+        debug!("Read file contents: {}", file_contents);
+        let config: PoetConfig = toml_converter::from_str(file_contents.as_str())
+            .expect("Error reading toml config file");
+        config
+    }
+
+    #[test]
+    fn test_init_enclave() {
+        let mut enclave = EnclaveConfig::default();
+        let config: PoetConfig = get_config();
+        enclave.initialize_enclave(&config);
+        assert_eq!((enclave.enclave_id.handle > 0), true);
+    }
+
+    #[test]
+    fn test_is_sgx_simulator() {
+        let sim_flag = match env::var("SGX_HW_MODE") {
+            Ok(hardware_mode) => {
+                if hardware_mode == "TRUE" {
+                    false
+                } else {
+                    true
+                }
+            }
+            Err(_) => false,
+        };
+
+        let mut enclave = EnclaveConfig::default();
+        let config: PoetConfig = get_config();
+        enclave.initialize_enclave(&config);
+        assert_eq!((enclave.enclave_id.handle > 0), true);
+
+        let ret = enclave.check_if_sgx_simulator();
+        assert!(ret, sim_flag);
+    }
+
+    #[test]
+    fn test_create_signup_info() {
+        let mut enclave = EnclaveConfig::default();
+        let config: PoetConfig = get_config();
+        enclave.initialize_enclave(&config);
+        assert_eq!((enclave.enclave_id.handle > 0), true);
+
+        let pub_key_hash = vec![0x45; 32];
+        enclave.create_signup_info(&str::from_utf8(&pub_key_hash).unwrap(), &config);
+        assert_eq!((enclave.signup_info.handle > 0), true);
+    }
+
+    #[test]
+    fn test_create_wait_certificate() {
+        let mut enclave = EnclaveConfig::default();
+        let config: PoetConfig = get_config();
+        enclave.initialize_enclave(&config);
+        assert_eq!((enclave.enclave_id.handle > 0), true);
+
+        let pub_key_hash = vec![0x45; 32];
+        enclave.create_signup_info(&str::from_utf8(&pub_key_hash).unwrap(), &config);
+        assert_eq!((enclave.signup_info.handle > 0), true);
+
+        let mut duration: u64 = 0x0102030405060708;
+        let prev_cert = "".to_string();
+        let prev_wait_cert_sig = "".to_string();
+        let validator_id = vec![0x41; 32];
+        let prev_block_id = "abc".to_string();
+        let block_summary = "this is first block";
+        let wait_time = 10_u64;
+
+        let (poet_pub_key, enclave_quote) = enclave.get_signup_parameters();
+
+        let ret_dur = EnclaveConfig::initialize_wait_certificate(
+            enclave.enclave_id,
+            &prev_cert.clone(),
+            &prev_wait_cert_sig.clone(),
+            &str::from_utf8(&validator_id).unwrap(),
+            &poet_pub_key,
+        );
+        assert_eq!((ret_dur > 0), true);
+
+        let (wait_cert, wait_cert_sig) = EnclaveConfig::finalize_wait_certificate(
+            enclave.enclave_id,
+            &prev_cert.clone(),
+            &prev_block_id.clone(),
+            &prev_wait_cert_sig.clone(),
+            block_summary.clone(),
+            wait_time.clone(),
+        );
+        assert_eq!(wait_cert.is_empty(), false);
+        assert_eq!(wait_cert_sig.is_empty(), false);
+        let verify_status = EnclaveConfig::verify_wait_certificate(
+            enclave.enclave_id,
+            &poet_pub_key,
+            &wait_cert,
+            &wait_cert_sig,
+        );
+        assert!(verify_status, true);
+    }
 }

@@ -80,7 +80,9 @@ node ('master') {
                 sh './bin/run_docker_test tests/unit-poet.yaml'
                 sh './bin/run_docker_test tests/unit-ias-client.yaml'
                 sh './bin/run_docker_test tests/unit-common.yaml'
-                // Note: Enable this when IAS proxy is made use
+                sh './bin/run_docker_test tests/unit-ffi.yaml'
+                sh './bin/run_docker_test tests/unit-cxx.yaml'
+                // TODO: Enable this when IAS proxy is made use
                 // sh './bin/run_docker_test tests/unit-ias-proxy.yaml'
                 sh '''
                   docker rm -f \
