@@ -461,15 +461,14 @@ poet_err_t Poet_InitializeWaitCertificate(
                                   
         sgx_ec256_signature_t waitCertificateSignature;
         sgx_ec256_public_t decodedPoetPublicKey;
-
         // Take the encoded wait certificate signature and PoET public keys and
         // convert them into something that is more convenient to use internally
         if (strnlen(prevWaitCertificateSig, prevWaitCertificateSigLen) > 0) {
             sp::Poet_DecodeSignature(&waitCertificateSignature, prevWaitCertificateSig);
         } 
-        
+        printf("\nDECODING POET PUB KEY\n");
         sp::DecodePublicKey(&decodedPoetPublicKey, poetPubKey);
-    
+        printf("decoded pub key\n");    
         g_Enclave.Enclave_InitializeWaitCertificate(
             prevWaitCertificate,
             prevWaitCertificateLen,
@@ -490,7 +489,6 @@ poet_err_t Poet_InitializeWaitCertificate(
         Poet_SetLastError("Unexpected exception");
         ret = POET_ERR_UNKNOWN;
     }
-
     return ret;
 } // Poet_InitialzeWaitCertificate
 
@@ -582,8 +580,9 @@ poet_err_t Poet_VerifyWaitCertificate(
         sp::Poet_DecodeSignature(
             &waitCertificateSignature,
             inWaitCertificateSignature);
+        printf("\ndecoding poet pub key\n");
         sp::DecodePublicKey(&poetPublicKey, inPoetPublicKey);
-
+        printf("\ncalling VerifyWaitCertificate\n");
         g_Enclave.VerifyWaitCertificate(
             inSerializedWaitCertificate,
             &waitCertificateSignature,

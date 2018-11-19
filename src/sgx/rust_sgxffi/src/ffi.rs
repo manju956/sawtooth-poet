@@ -121,6 +121,7 @@ pub fn initialize_wait_cert(eid: &mut r_sgx_enclave_id_t, duration: &mut u64,
         let prev_wait_cert_sig_cstring = CString::new(prev_wait_cert_sig).unwrap();
         let validator_id_ctring = CString::new(validator_id).unwrap();
         let poet_pub_key_cstring = CString::new(poet_pub_key).unwrap();
+
         let wait_cert_init_status = r_initialize_wait_certificate(eid_ptr, 
                                         duration_ptr, 
                                         prev_wait_cert_cstring.as_ptr(),
@@ -129,7 +130,9 @@ pub fn initialize_wait_cert(eid: &mut r_sgx_enclave_id_t, duration: &mut u64,
                                         poet_pub_key_cstring.as_ptr());  
 
         //convert u8 array to u64 duration
-        *duration = transmute::<[u8; 8], u64>(duration_arr).to_le();
+        if(wait_cert_init_status == 0) {
+            *duration = transmute::<[u8; 8], u64>(duration_arr).to_le();
+        }
 
         match wait_cert_init_status {
             0 => Ok("Success".to_string()),
@@ -160,7 +163,7 @@ pub fn finalize_wait_cert(eid: &mut r_sgx_enclave_id_t,
                                                 prev_wait_cert_sig_cstring.as_ptr(),
                                                 block_summary_cstring.as_ptr(),
                                                 *wait_time);
-
+ 
         match wait_cert_final_status {
             0 => Ok("Success".to_string()),
             _ => Err("Finalize certificate failed".to_string()),
@@ -180,9 +183,11 @@ pub fn verify_wait_certificate(eid: &mut r_sgx_enclave_id_t,
         let wait_cert_sign_cstring = CString::new(wait_cert_sign).unwrap();
 
         let ppk_cstring = CString::new(ppk).unwrap();
+
         let status = r_verify_wait_certificate(eid_ptr, ppk_cstring.as_ptr(),
                                                wait_cert_cstring.as_ptr(),
                                                wait_cert_sign_cstring.as_ptr());
+        println!("verification status = {}", status);
         status
     }
 }

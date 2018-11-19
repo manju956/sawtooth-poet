@@ -141,7 +141,8 @@ int r_create_signup_info(r_sgx_enclave_id_t *eid, const char *opk_hash,
     signup_info->handle = (intptr_t)signup_data; 
 
     if (signup_data->poet_public_key.empty()) {
-      return -1;
+        printf("\npoet_public_key is empty\n");
+        return -1;
     }
     signup_info->poet_public_key = (char *)signup_data->poet_public_key.c_str();
     signup_info->enclave_quote = (char *)signup_data->enclave_quote.c_str();
@@ -166,7 +167,7 @@ int r_initialize_wait_certificate(r_sgx_enclave_id_t *eid, uint8_t* duration,
 
     poet_err_t ret = initialize_wait_certificate(prev_wait_cert, validator_id,
                                                  prev_wait_cert_sig, poet_pub_key, duration,
-                                                 DURATION_LENGTH_BYTES); 
+                                                 DURATION_LENGTH_BYTES);
     return ret;
 }
 
@@ -198,10 +199,12 @@ int r_finalize_wait_certificate(r_sgx_enclave_id_t* eid,
     //store wait certificate handle
     wait_cert->handle = (intptr_t) wait_certificate;
     if ( wait_certificate->serialized.empty() ) {
+        printf("\nwait_certificate->serialized is empty\n");
         return -1;
     }
     wait_cert->ser_wait_cert = (char*) wait_certificate->serialized.c_str();
     if (wait_certificate->signature.empty()) {
+        printf("wait_certificate->signature is empty\n");
         return -1;
     }
     wait_cert->ser_wait_cert_sign = (char*) wait_certificate->signature.c_str();   
@@ -219,11 +222,11 @@ WaitCertificate* validate_wait_certificate(const char* ser_wait_cert,
 bool r_verify_wait_certificate(r_sgx_enclave_id_t *eid, const char *ppk,
                                const char* wait_cert, const char* wait_cert_sign) {
     if (!eid || (ppk == NULL) || (wait_cert == NULL) || (wait_cert_sign == NULL)) {
-        return -1;
+        return false;
     }
 
     if(eid->handle == 0){
-        return -1;
+        return false;
     }
     return _verify_wait_certificate(wait_cert, wait_cert_sign, ppk);
 }

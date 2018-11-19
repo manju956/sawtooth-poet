@@ -63,8 +63,7 @@ bool _verify_wait_certificate(
             serializedWaitCertificate.c_str(),
             waitCertificateSignature.c_str(),
             poetPublicKey.c_str() );
-    ThrowPoetError(ret);
-
+    //ThrowPoetError(ret);
     if(ret == POET_SUCCESS) return true;
     return false;
 }
@@ -96,10 +95,11 @@ WaitCertificate::WaitCertificate(
             signatureBuffer.data(),
             signatureBuffer.length
         );
-
-    this->serialized = std::string(serializedBuffer.data());
-    this->signature = std::string(signatureBuffer.data());
-    this->deserialize(this->serialized);
+    if(POET_SUCCESS == ret) {
+        this->serialized = std::string(serializedBuffer.data());
+        this->signature = std::string(signatureBuffer.data());
+        this->deserialize(this->serialized);
+    }
 } // WaitCertificate::WaitCertificate
 
 
@@ -127,7 +127,7 @@ poet_err_t WaitCertificate::_InitializeWaitCertificate(
             durationLen
             );
         
-    ThrowPoetError(ret);
+    //ThrowPoetError(ret);
     
 } // WaitCertificate::_InitializeWaitCertificate
 
