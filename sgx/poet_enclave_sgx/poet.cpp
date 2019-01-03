@@ -22,6 +22,9 @@
 #include "error.h"
 #include <iostream>
 #include <vector>
+#include <mutex>
+
+std::mutex lock;
 
 // XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 bool _is_sgx_simulator()
@@ -83,8 +86,12 @@ Poet* Poet::getInstance(
     const std::string& enclaveModulePath,
     const std::string& spid)
 {
-    if(!Poet::instance){
-        Poet::instance = new Poet(enclaveModulePath, spid);
+    if (Poet::instance == nullptr) {
+        lock.lock();
+        if (Poet::instance == nullptr) {
+            Poet::instance = new Poet(enclaveModulePath, spid);
+        }
+        lock.unlock();
     }
     return Poet::instance;
 }
