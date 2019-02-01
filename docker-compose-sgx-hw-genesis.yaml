@@ -22,7 +22,7 @@ volumes:
 
 services:
 
-  validator-1:
+  validator-sgx-1:
     image: sawtooth-poet-validator:latest
     build:
       context: .
@@ -35,9 +35,11 @@ services:
       - 4004
       - 8800
       - 5050
+    ports:
+      - '8800:8800'
     volumes:
       - poet-share:/poet_keys
-      - ./logs1/validator:/var/log/sawtooth
+      - ./src/core/src/resources:/config
     # start the validator with an empty genesis batch
     working_dir: /root
     command: "bash -c \"\
@@ -53,20 +55,23 @@ services:
           -k /etc/sawtooth/keys/validator.priv \
           sawtooth.consensus.algorithm=poet2 \
           sawtooth.poet.block_claim_delay=0 \
+          sawtooth.poet.report_public_key_pem=\
+          \\\"$$(cat /config/ias_report_key.pem)\\\" \
           -o config.batch && \
         sawadm genesis \
           config-genesis.batch config.batch /poet_keys/poet-config.batch && \
         echo $$(cat /etc/sawtooth/keys/validator.pub); \
         sawtooth-validator -v \
-            --endpoint tcp://validator-1:8800 \
+            --endpoint tcp://10.66.245.133:8800 \
             --bind component:tcp://eth0:4004 \
             --bind network:tcp://eth0:8800 \
             --bind consensus:tcp://eth0:5050 \
             --scheduler parallel \
+            --peering static --peers tcp://10.66.245.173:8800,tcp://10.66.254.115:8800
     \""
     stop_signal: SIGKILL
 
-  poet-2-engine-1:
+  poet-2-engine-sgx-1:
     build:
       context: .
       dockerfile: poet-sgx-engine.dockerfile
@@ -78,15 +83,17 @@ services:
       - ./:/project/sawtooth-poet/
       - cargo-registry:/root/.cargo/registry
       - poet-share:/poet_keys
-      - ./logs1/poet:/var/log/sawtooth-poet
     working_dir: '/project/sawtooth-poet/src/core'
     environment:
       - 'http_proxy=${http_proxy}'
       - 'https_proxy=${https_proxy}'
-      - 'no_proxy=${no_proxy},validator-1,rest-api-1'
+      - 'no_proxy=${no_proxy},10.66.245.133,10.66.245.173,10.66.254.115'
+      - "SGX_HW_MODE=TRUE"
+    devices:
+      - "/dev/isgx:/dev/isgx"
     depends_on:
-      - validator-1
-      - validator-registry-tp-1
+      - validator-sgx-1
+      - validator-registry-tp-sgx-1
     entrypoint: "bash -c \"\
         rm -f /poet_keys/poet-config.batch \
         && while [ ! -f /poet_keys/validator.priv ]; do sleep 1; done \
@@ -94,43 +101,43 @@ services:
         && mkdir -p /etc/sawtooth/keys/ \
         && cp /poet_keys/validator.* /etc/sawtooth/keys/ \
         && source /project/sawtooth-poet/build_sgx_binary.sh \
-        && RUST_BACKTRACE=1 cargo run --bin sawtooth-poet -- -C \
-        tcp://validator-1:5050 --config \
-        /project/sawtooth-poet/src/core/src/resources/poet_config.toml -v \
-        --genesis /poet_keys/poet-config.batch \""
+        && RUST_BACKTRACE=1 cargo run --bin sawtooth-poet -- \
+        -C tcp://validator-sgx-1:5050 \
+        --config /project/sawtooth-poet/src/core/src/resources/poet_config.toml \
+        -v --genesis /poet_keys/poet-config.batch \""
     stop_signal: SIGKILL
 
-  rest-api-1:
+  rest-api-sgx-1:
     image: hyperledger/sawtooth-rest-api:latest
     expose:
       - "8008"
     depends_on:
-      - validator-1
-    entrypoint: sawtooth-rest-api -C tcp://validator-1:4004 --bind rest-api-1:8008
+      - validator-sgx-1
+    entrypoint: sawtooth-rest-api -C tcp://validator-sgx-1:4004 --bind rest-api-sgx-1:8008
 
-  settings-tp-1:
+  settings-tp-sgx-1:
     image: hyperledger/sawtooth-settings-tp:latest
     depends_on:
-      - validator-1
-    entrypoint: settings-tp -vv -C tcp://validator-1:4004
+      - validator-sgx-1
+    entrypoint: settings-tp -vv -C tcp://validator-sgx-1:4004
 
-  intkey-tp-python-1:
+  intkey-tp-python-sgx-1:
     image: hyperledger/sawtooth-intkey-tp-python:latest
     depends_on:
-      - validator-1
-    entrypoint: intkey-tp-python -vv -C tcp://validator-1:4004
+      - validator-sgx-1
+    entrypoint: intkey-tp-python -vv -C tcp://validator-sgx-1:4004
 
   shell:
     image: hyperledger/sawtooth-all:latest
     container_name: sawtooth-shell-default
     depends_on:
-      - rest-api-1
+      - rest-api-sgx-1
     entrypoint: "bash -c \"\
         sawtooth keygen --force && \
         tail -f /dev/null \
         \""
 
-  validator-registry-tp-1:
+  validator-registry-tp-sgx-1:
     image: sawtooth-poet-validator-registry-tp:latest
     build:
       context: ./
@@ -146,12 +153,14 @@ services:
     environment:
       - 'http_proxy=${http_proxy}'
       - 'https_proxy=${https_proxy}'
-      - 'no_proxy=${no_proxy},validator-1'
+      - 'no_proxy=${no_proxy},10.66.245.133,10.66.245.173,10.66.140.4'
+      - 'SGX_HW_MODE=TRUE'
     depends_on:
-      - validator-1
+      - validator-sgx-1
     entrypoint: "bash -c \"\
         RUST_BACKTRACE=1 cargo run --bin validator_registry_tp -- -vv -C \
-        tcp://validator-1:4004 && \
+        tcp://validator-sgx-1:4004 && \
          tail -f /dev/null \
         \""
     stop_signal: SIGKILL
+
